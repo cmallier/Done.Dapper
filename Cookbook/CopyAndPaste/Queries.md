@@ -4,18 +4,18 @@
 ## Simple Select
 
 ```csharp
+string sql =
+    """
+    select
+        ...
+    from
+        dbo.Blogs b
+    where
+        b.Id = @Id
+    """;
+
 using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 {
-    string sql =
-        """
-        select
-          ..
-        from
-          dbo.Blogs b
-        where
-          b.Id = @Id
-        """;
-
     TModel? model = await dbConnection.QueryFirstOrDefaultAsync<TModel>( sql, param: new { Id = 1 } );
 
     return model;
@@ -23,28 +23,75 @@ using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 ```
 
 
-## One-to-many
+## One-One
 
-1 Blog has many Posts
+Expemple: Une personne a une seule Adresse
 
-- TModel = Blog
-- TCollectionModel = Post
+| PersonId | Name  | Street      | City     |
+|----------|-------|-------------|----------|
+| 1        | Anton | 1 main road | Montreal |
+| 2        | Ben   | 678 Elm     | Quebec   |
+| 3        | Carl  | 99 Keaton   | Ottawa   |
+
 
 ```csharp
+string sql =
+    """
+    select
+        p.PersonId,
+        p.Name,
+        a.Street,          -- SplitOn (Address)
+        a.City
+    from
+        Persons p
+        inner join Address a on p.PersonId = a.PersonId
+    """;
+
 using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 {
-    string sql =
-        """
-        select
-          b.BlogId as Id,    -- SplitOn (Blog)
-          ...
-          p.PostId,          -- SplitOn (Posts)
-          ...
-        from
-          dbo.Blogs b
-          inner join dbo.Posts p on p.BlogId = b.BlogId
-        """;
+    IEnumerable<Person> people = dbConnection.Query<Person, Address, Person>(
+        sql,
+        ( person, address ) =>
+        {
+            person.Address = address;
+            return person;
+        },
+        splitOn: "Street" );
 
+    return people;
+}
+```
+
+
+## Many -> many
+
+Many Blog has one or many Posts
+
+| BlogId | Name         | PostId | Title   |
+|--------|--------------|--------|---------|
+| 1      | Alimentation | 12     | Avocat  |
+| 1      | Alimentation | 67     | Banane  |
+| 1      | Alimentation | 345    | Carotte |
+| 2      | Vehicule     | 23     | Auto    |
+| 2      | Vehicule     | 3567   | Bateau  |
+| 3      | Plante       | 249    | Cactus  |
+
+
+```csharp
+string sql =
+    """
+    select
+        b.BlogId,         -- SplitOn (Blog)
+        ...
+        p.PostId,          -- SplitOn (Posts)
+        ...
+    from
+        dbo.Blogs b
+        inner join dbo.Posts p on p.BlogId = b.BlogId
+    """;
+
+using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
+{
     IEnumerable<Blog> blogs = dbConnection.Query<Blog, Post, Blog>(
         sql,
         ( blog, post ) =>
@@ -52,15 +99,63 @@ using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
             blog.Posts.Add( post );
             return blog;
         },
-        splitOn: "Id, PostId" );
+        splitOn: "PostId" );
 
 
-    ICollection<Blog> result = (blogs.GroupBy( b => b.Id ).Select( g =>
+    ICollection<Blog> result = (blogs.GroupBy( b => b.BlogId ).Select( g =>
     {
         Blog groupedBlog = g.First();
         groupedBlog.Posts = g.Select( b => b.Posts.Single() ).ToList();
+
         return groupedBlog;
     } )).ToList();
+
+    return result;
+}
+```
+
+
+## Many -> many (V2)
+
+```csharp
+string sql =
+"""
+select
+    b.BlogId as Id,    -- SplitOn (Blog)
+    ...
+    p.PostId,          -- SplitOn (Posts)
+    ...
+from
+    dbo.Blogs b
+    inner join dbo.Posts p on p.BlogId = b.BlogId
+where
+    b.BlogId = @Id
+""";
+
+// Dictionary outisde the Query
+Dictionary<int, Blog> dictionary = new();
+
+using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
+{
+    IEnumerable<Blog> blogs = dbConnection.Query<Blog, Post, Blog>(
+        sql,
+        ( blog, post ) =>
+        {
+            if( dictionary.TryGetValue( blog.Id, out Blog? existingBlog ) )
+            {
+                blog = existingBlog
+            }
+            else
+            {
+                dictionary.Add( blog.Id, blog );
+            }
+
+            blog.Posts.Add( post );'
+
+            return null;
+        },
+        param: new { Id = 1 },
+        splitOn: "PostId" );
 }
 ```
 

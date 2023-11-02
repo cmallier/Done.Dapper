@@ -72,7 +72,7 @@ string connectionString = "Server=DESKTOP-HOME; Database=SandboxDapper; Trusted_
 #endregion
 
 
-#region (Multiple)
+#region Query (Multiple)
 string query =
 """
 select BlogId as Id, * from Blogs where BlogId = @Id;
@@ -84,24 +84,20 @@ int id = 1;
 
 using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 {
-    using( SqlMapper.GridReader reader = await dbConnection.QueryMultipleAsync( query, new { id } ) )
+    using SqlMapper.GridReader reader = await dbConnection.QueryMultipleAsync( query, new { id } );
+    Blog? blog = await reader.ReadSingleOrDefaultAsync<Blog>();
+
+    if( blog is not null )
     {
-        Blog? blog = await reader.ReadSingleOrDefaultAsync<Blog>();
-
-        if( blog is not null )
-        {
-            blog.Posts = (await reader.ReadAsync<Post>()).ToList();
-        }
-
-        Console.WriteLine( $"Title: {blog?.Title} Posts: {blog?.Posts.Count}" );
+        blog.Posts = (await reader.ReadAsync<Post>()).ToList();
     }
-}
 
+    Console.WriteLine( $"Title: {blog?.Title} Posts: {blog?.Posts.Count}" );
+}
 #endregion
 
 
-
-#region Simple Command (Insert)
+#region Command (Insert)
 //using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 //{
 //    Blog newBlog = new() { Title = "Blog 3", Url = "http://blog3.com", IsActive = true };
@@ -126,7 +122,7 @@ using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 #endregion
 
 
-#region Simple Command (Update)
+#region Command (Update)
 //using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 //{
 //    int blogId = 3;
@@ -155,7 +151,7 @@ using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 #endregion
 
 
-#region Simple Command (Delete)
+#region Command (Delete)
 //using( IDbConnection dbConnection = new SqlConnection( connectionString ) )
 //{
 //    int blogId = 3;
